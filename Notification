@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Agendador de Tarefas</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f4f4f4;
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+        }
+        form {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        label {
+            display: block;
+            margin: 10px 0;
+        }
+        input, select {
+            margin: 5px 0;
+            width: 100%; /* Ajusta a largura para ocupar toda a largura disponível */
+        }
+        button {
+            padding: 10px;
+            background-color: #007BFF;
+            color: #fff;
+            border: none;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        #tasks {
+            text-align: center;
+        }
+        #tasks ul {
+            list-style-type: none;
+            padding: 0;
+        }
+        #tasks li {
+            margin: 10px 0;
+            position: relative;
+        }
+        .completed {
+            text-decoration: line-through;
+            color: red !important; /* Força a cor vermelha mesmo que outras regras de estilo a estejam sobrescrevendo */
+        }
+        .late {
+            color: red;
+        }
+        #confirmation {
+            color: #28a745;
+            font-weight: bold;
+        }
+        #clearButton {
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>Agendador de Tarefas</h1>
+    
+    <form id="taskForm">
+        <label for="cliente">Nome do Cliente:</label>
+        <input type="text" id="cliente" name="cliente" required>
+
+        <label for="placa">Placa:</label>
+        <input type="text" id="placa" name="placa" required>
+
+        <label for="servico">Serviço:</label>
+        <select id="servico" name="servico" required>
+            <option value="revisao">Revisão</option>
+            <option value="diagnostico">Diagnóstico</option>
+            <option value="pecas">Peças</option>
+            <option value="lembrete">Lembrete</option>
+            <option value="outros">Outros</option>
+        </select>
+
+        <label for="outrosServicos" id="outrosServicosLabel" style="display:none;">Especifique o Serviço:</label>
+        <input type="text" id="outrosServicos" name="outrosServicos" style="display:none;">
+
+        <label for="horario">Horário de Entrega:</label>
+        <input type="time" id="horario" name="horario" required>
+
+        <button type="button" onclick="confirmSchedule()">Agendar Tarefa</button>
+    </form>
+
+    <div id="confirmation"></div>
+
+    <div id="tasks">
+        <h2>Tarefas Agendadas</h2>
+        <ul id="taskList"></ul>
+    </div>
+
+    <button id="clearButton" onclick="clearLocalStorage()">Limpar Tarefas</button>
+
+    <!-- Adicionando áudio para o bip -->
+    <audio id="bipSound">
+        <source src="https://www.soundjay.com/button/beep-07.mp3" type="audio/mpeg">
+        Your browser does not support the audio element.
+    </audio>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            displayTasks();
+            setInterval(checkLateTasks, 1000 * 60); // Verifica tarefas atrasadas a cada minuto
+        });
+
+        function confirmSchedule() {
+            var clienteInput = document.getElementById("cliente");
+            var placaInput = document.getElementById("placa");
+            var servicoInput = document.getElementById("servico");
+            var outrosServicosInput = document.getElementById("outrosServicos");
+            var horarioInput = document.getElementById("horario");
+
+            var cliente = clienteInput.value;
+            var placa = placaInput.value;
+            var servico = servicoInput.value;
+            var outrosServicos = outrosServicosInput.value;
+            var horario = horarioInput.value;
+
+            if (cliente && placa && horario) {
+                var confirmation = confirm("Confirma agendamento para " + cliente + " (Placa: " + placa + ") do serviço " + (servico === 'outros' ? outrosServicos : servico) + " para as " + horario + "?");
+
+                if (confirmation) {
+                    saveTask(cliente, placa, servico, outrosServicos, horario);
+                    displayTasks();
+                    scheduleTask(cliente, placa, servico, outrosServicos, horario);
+                    clienteInput.value = "";
+                    placaInput.value = "";
+                    servicoInput.value = "";
+                    outrosServicosInput.value = "";
+                    horarioInput.value = "";
+
+                    // Resetando o campo de outros serviços e escondendo o rótulo se estiver visível
+                    document.getElementById("outrosServicosLabel").style.display = "none";
+                    document.getElementById("outrosServicos").style.display = "none";
+                }
+            } else {
+                alert("Por favor, preencha todos os campos obrigatórios.");
+            }
+        }
+
+        function scheduleTask(cliente, placa, servico, outrosServicos, horario) {
+            var now = new Date();
+            var scheduledTime = new Date(now.toDateString() + " " + horario);
+
+            var timeDifference = scheduledTime - now;
+
+            if (timeDifference > 0) {
+                setTimeout(function() {
+                    showNotification("Tarefa agendada", "Cliente: " + cliente + " (Placa: " + placa + ") - Serviço: " + (servico === 'outros' ? outrosServicos : servico) + " - Horário de Entrega: " + horario);
+                }, timeDifference);
+            } else {
+                alert("Por favor, escolha um horário futuro.");
+            }
+        }
+
+        function showNotification(title, message) {
+            // Verifica se o navegador suporta notificações
+            if ('Notification' in window) {
+                // Verifica se as notificações estão permitidas
+                if (Notification.permission === 'granted') {
+                    // Cria a notificação
+                    var notification = new Notification(title, {
+                        body: message
+                    });
+                } else if (Notification.permission !== 'denied') {
+                    // Pede permissão ao usuário para mostrar notificações
+                    Notification.requestPermission().then(function(permission) {
+                        if (permission === 'granted') {
+                            var notification = new Notification(title, {
+                                body: message
+                            });
+                        }
+                    });
+                }
+            }
+        }
+
+        function saveTask(cliente, placa, servico, outrosServicos, horario) {
+            var tasks = JSON.parse(localStorage.getItem('tasks')) || [];
+            tasks.push({ cliente: cliente, placa: placa, servico: (servico === 'outros' ? outrosServicos : servico), horario: horario, completed: false });
+            localStorage.setItem('tasks', JSON.stringify(tasks));
+        }
+
+        function displayTasks() {
+            var taskList = document.getElementById('taskList');
+            taskList.innerHTML = '';
+
+            var tasks = JSON.parse(localStorage.getItem('tasks')) || [];
+
+            tasks.forEach(function(task, index) {
+                var li = document.createElement('li');
+                li.textContent = "Cliente: " + task.cliente + " (Placa: " + task.placa + ") - Serviço: " + task.servico + " - Horário de Entrega: " + task.horario;
+
+                // Adiciona checkbox para marcar tarefa como concluída
+                var checkbox = document.createElement('input');
+                checkbox.type = 'checkbox';
+                checkbox.id = 'checkbox' + index;
+                checkbox.checked = task.completed;
+                checkbox.addEventListener('change', function() {
+                    markTaskAsCompleted(index);
+                });
+                li.appendChild(checkbox);
+
+                // Adiciona classe 'completed' se a tarefa estiver concluída
+                if (task.completed) {
+                    li.classList.add('completed');
+                }
+
+                // Adiciona classe 'late' se a tarefa estiver atrasada
+                if (isTaskLate(task.horario)) {
+                    li.classList.add('late');
+                }
+
+                taskList.appendChild(li);
+            });
+        }
+
+        function markTaskAsCompleted(index) {
+            var tasks = JSON.parse(localStorage.getItem('tasks')) || [];
+            tasks[index].completed = !tasks[index].completed;
+            localStorage.setItem('tasks', JSON.stringify(tasks));
+            displayTasks();
+        }
+
+        function isTaskLate(horario) {
+            var now = new Date();
+            var scheduledTime = new Date(now.toDateString() + " " + horario);
+            return now > scheduledTime;
+        }
+
+        function checkLateTasks() {
+            var tasks = JSON.parse(localStorage.getItem('tasks')) || [];
+            var changed = false;
+
+            tasks.forEach(function(task, index) {
+                var li = document.getElementById('checkbox' + index).parentNode;
+
+                if (isTaskLate(task.horario) && !li.classList.contains('late')) {
+                    li.classList.add('late');
+                    changed = true;
+                }
+            });
+
+            if (changed) {
+                displayTasks();
+            }
+        }
+
+        function clearLocalStorage() {
+            localStorage.removeItem('tasks');
+            displayTasks();
+        }
+
+        // Exibir/esconder campo de "Outros" ao selecionar/deselecionar a opção "Outros"
+        document.getElementById("servico").addEventListener("change", function() {
+            var outrosServicosLabel = document.getElementById("outrosServicosLabel");
+            var outrosServicosInput = document.getElementById("outrosServicos");
+
+            if (this.value === "outros") {
+                outrosServicosLabel.style.display = "block";
+                outrosServicosInput.style.display = "block";
+            } else {
+                outrosServicosLabel.style.display = "none";
+                outrosServicosInput.style.display = "none";
+            }
+        });
+    </script>
+
+</body>
+</html>
